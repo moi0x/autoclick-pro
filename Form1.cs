@@ -1,27 +1,25 @@
-﻿using System;
+using System;
+using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
-using System.Drawing;
+using System.Drawing.Drawing2D;
+using AutoUpdaterDotNET;
 
 namespace autoclick
 {
     public partial class Form1 : Form
     {
-        // Timer clic automatique
-        private System.Windows.Forms.Timer timer1;
+        private System.Windows.Forms.Timer clickTimer;
+        private System.Windows.Forms.Timer cpsTimer;
+        
+        private int clickCount = 0;
+        private int currentCps = 0;
+        private bool isRunning = false;
+        private bool isUpdatingIntervals = false;
 
-        // Timer animation CPS
-        private System.Windows.Forms.Timer animationTimer;
-
-        // Glow CPS
         private int glow = 0;
         private bool glowUp = true;
-
-        // CPS compteur
-        private int clickCount = 0;
-        private DateTime lastTime;
-
-        // Pour le clic souris
+        
         [DllImport("user32.dll")]
         static extern void mouse_event(int dwFlags, int dx, int dy, int dwData, int dwExtraInfo);
 
@@ -29,8 +27,9 @@ namespace autoclick
         const int LEFTUP = 0x04;
         const int RIGHTDOWN = 0x08;
         const int RIGHTUP = 0x10;
+        const int MIDDLEDOWN = 0x20;
+        const int MIDDLEUP = 0x40;
 
-        // Hotkey F6 global
         [DllImport("user32.dll")]
         private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, Keys vk);
 
@@ -38,145 +37,283 @@ namespace autoclick
         private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
         const int HOTKEY_ID = 9000;
+        private Keys currentHotkey = Keys.F6;
+        
+        // Custom Titlebar drag
+        public const int WM_NCLBUTTONDOWN = 0xA1;
+        public const int HT_CAPTION = 0x2;
+
+        [DllImport("user32.dll")]
+        public static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
+        [DllImport("user32.dll")]
+        public static extern bool ReleaseCapture();
 
         public Form1()
         {
             InitializeComponent();
-            lastTime = DateTime.Now;
+            SetupCustomUI();
 
-            // 🔴 Design rouge gaming
-            this.BackColor = Color.FromArgb(18, 18, 18);
+            // Intégration de la vérification de mise à jour avec AutoUpdater.NET
+            AutoUpdater.Start("https://raw.githubusercontent.com/moi0x/autoclick-pro/master/update.xml");
 
-            // Boutons START/STOP
-            buttonStart.BackColor = Color.FromArgb(200, 30, 30);
-            buttonStart.ForeColor = Color.White;
-            buttonStart.FlatStyle = FlatStyle.Flat;
-            buttonStart.FlatAppearance.BorderSize = 0;
+            clickTimer = new System.Windows.Forms.Timer();
+            clickTimer.Tick += ClickTimer_Tick;
 
-            buttonStop.BackColor = Color.FromArgb(120, 20, 20);
-            buttonStop.ForeColor = Color.White;
-            buttonStop.FlatStyle = FlatStyle.Flat;
-            buttonStop.FlatAppearance.BorderSize = 0;
+            cpsTimer = new System.Windows.Forms.Timer();
+            cpsTimer.Interval = 1000;
+            cpsTimer.Tick += CpsTimer_Tick;
+            
+            System.Windows.Forms.Timer uiTimer = new System.Windows.Forms.Timer();
+            uiTimer.Interval = 40;
+            uiTimer.Tick += UiTimer_Tick;
+            uiTimer.Start();
 
-            // ComboBox
-            comboBoxButton.BackColor = Color.FromArgb(30, 30, 30);
-            comboBoxButton.ForeColor = Color.White;
-
-            // NumericUpDown
-            numericUpDown1.BackColor = Color.FromArgb(30, 30, 30);
-            numericUpDown1.ForeColor = Color.White;
-
-            // Label CPS
-            labelCPS.ForeColor = Color.Red;
-            labelCPS.Font = new Font("Segoe UI", 18, FontStyle.Bold);
-
-            // Setup ComboBox clic gauche/droit
-            comboBoxButton.Items.Add("Gauche");
-            comboBoxButton.Items.Add("Droite");
-            comboBoxButton.SelectedIndex = 0;
-
-            // Timer clic automatique
-            timer1 = new System.Windows.Forms.Timer();
-            timer1.Tick += timer1_Tick;
-
-            // Timer animation CPS
-            animationTimer = new Timer();
-            animationTimer.Interval = 40;
-            animationTimer.Tick += AnimateGlow;
-            animationTimer.Start();
-
-            // Hover boutons
-            buttonStart.MouseEnter += ButtonHover;
-            buttonStart.MouseLeave += ButtonLeave;
-            buttonStop.MouseEnter += ButtonHover;
-            buttonStop.MouseLeave += ButtonLeave;
-
-            // Hotkey F6
-            RegisterHotKey(this.Handle, HOTKEY_ID, 0, Keys.F6);
+            RegisterHotKey(this.Handle, HOTKEY_ID, 0, currentHotkey);
             this.FormClosing += Form1_FormClosing;
         }
 
-        // Bouton START
-        private void buttonStart_Click(object sender, EventArgs e)
+        private void SetupCustomUI()
         {
-            timer1.Interval = (int)numericUpDown1.Value;
-            timer1.Start();
+            this.FormBorderStyle = FormBorderStyle.None;
+            this.BackColor = Color.FromArgb(20, 20, 24);
+
+            // Custom Title Bar
+            pnlTitleBar.BackColor = Color.FromArgb(30, 30, 36);
+            pnlTitleBar.MouseDown += TitleBar_MouseDown;
+            lblTitle.MouseDown += TitleBar_MouseDown;
+
+            SetupComboBox(comboMouseBtn);
+            SetupComboBox(comboClickType);
+            comboMouseBtn.SelectedIndex = 0;
+            comboClickType.SelectedIndex = 0;
+
+            ApplyNumericUpDownStyle(numHours);
+            ApplyNumericUpDownStyle(numMins);
+            ApplyNumericUpDownStyle(numSecs);
+            ApplyNumericUpDownStyle(numMs);
+            ApplyNumericUpDownStyle(numTargetCps);
+
+            btnStart.BackColor = Color.FromArgb(40, 150, 80);
+            btnStop.BackColor = Color.FromArgb(180, 50, 50);
+
+            // Hover animations
+            btnStart.MouseEnter += (s, e) => { if (btnStart.Enabled) btnStart.BackColor = Color.FromArgb(50, 180, 100); };
+            btnStart.MouseLeave += (s, e) => btnStart.BackColor = Color.FromArgb(40, 150, 80);
+            btnStop.MouseEnter += (s, e) => { if (btnStop.Enabled) btnStop.BackColor = Color.FromArgb(210, 60, 60); };
+            btnStop.MouseLeave += (s, e) => btnStop.BackColor = Color.FromArgb(180, 50, 50);
+
+            btnClose.MouseEnter += (s, e) => btnClose.BackColor = Color.FromArgb(220, 50, 50);
+            btnClose.MouseLeave += (s, e) => btnClose.BackColor = Color.Transparent;
+            btnMinimize.MouseEnter += (s, e) => btnMinimize.BackColor = Color.FromArgb(60, 60, 70);
+            btnMinimize.MouseLeave += (s, e) => btnMinimize.BackColor = Color.Transparent;
+
+            // Set version
+            lblVersion.Text = $"v{Application.ProductVersion}";
         }
 
-        // Bouton STOP
-        private void buttonStop_Click(object sender, EventArgs e)
+        private void SetupComboBox(ComboBox cb)
         {
-            timer1.Stop();
+            cb.BackColor = Color.FromArgb(40, 40, 48);
+            cb.ForeColor = Color.White;
+            cb.FlatStyle = FlatStyle.Flat;
+        }
+        
+        private void ApplyNumericUpDownStyle(NumericUpDown nud)
+        {
+            nud.BackColor = Color.FromArgb(40, 40, 48);
+            nud.ForeColor = Color.White;
+            nud.BorderStyle = BorderStyle.FixedSingle;
         }
 
-        // Timer clic automatique
-        private void timer1_Tick(object sender, EventArgs e)
+        private void TitleBar_MouseDown(object sender, MouseEventArgs e)
         {
-            if (comboBoxButton.SelectedItem.ToString() == "Gauche")
+            if (e.Button == MouseButtons.Left)
             {
-                mouse_event(LEFTDOWN, 0, 0, 0, 0);
-                mouse_event(LEFTUP, 0, 0, 0, 0);
+                ReleaseCapture();
+                SendMessage(Handle, WM_NCLBUTTONDOWN, HT_CAPTION, 0);
             }
-            else
-            {
-                mouse_event(RIGHTDOWN, 0, 0, 0, 0);
-                mouse_event(RIGHTUP, 0, 0, 0, 0);
-            }
+        }
 
+        private void btnStart_Click(object sender, EventArgs e)
+        {
+            StartClicker();
+        }
+
+        private void btnStop_Click(object sender, EventArgs e)
+        {
+            StopClicker();
+        }
+
+        private void numTargetCps_ValueChanged(object sender, EventArgs e)
+        {
+            if (isUpdatingIntervals) return;
+            if (numTargetCps.Value > 0)
+            {
+                isUpdatingIntervals = true;
+                int ms = 1000 / (int)numTargetCps.Value;
+                numHours.Value = 0;
+                numMins.Value = 0;
+                numSecs.Value = 0;
+                numMs.Value = ms > 0 ? ms : 1;
+                isUpdatingIntervals = false;
+            }
+        }
+
+        private void numMs_ValueChanged(object sender, EventArgs e)
+        {
+            if (isUpdatingIntervals) return;
+            int totalMs = (int)(numHours.Value * 3600000 + numMins.Value * 60000 + numSecs.Value * 1000 + numMs.Value);
+            if (totalMs > 0 && totalMs <= 1000)
+            {
+                isUpdatingIntervals = true;
+                int cps = 1000 / totalMs;
+                if (cps <= numTargetCps.Maximum)
+                    numTargetCps.Value = cps > 0 ? cps : 1;
+                isUpdatingIntervals = false;
+            }
+            else if (totalMs > 1000)
+            {
+                isUpdatingIntervals = true;
+                numTargetCps.Value = 1;
+                isUpdatingIntervals = false;
+            }
+        }
+
+        private void StartClicker()
+        {
+            if (isRunning) return;
+            
+            int interval = (int)(numHours.Value * 3600000 + numMins.Value * 60000 + numSecs.Value * 1000 + numMs.Value);
+            if (interval <= 0) interval = 10;
+            
+            clickTimer.Interval = interval;
+            clickTimer.Start();
+            cpsTimer.Start();
+            
+            isRunning = true;
+            lblStatus.Text = "Status: RUNNING";
+            lblStatus.ForeColor = Color.FromArgb(80, 200, 100);
+            btnStart.Enabled = false;
+            btnStop.Enabled = true;
+            
+            clickCount = 0;
+            currentCps = 0;
+            lblCps.Text = "0 CPS";
+        }
+
+        private void StopClicker()
+        {
+            if (!isRunning) return;
+            
+            clickTimer.Stop();
+            cpsTimer.Stop();
+            
+            isRunning = false;
+            lblStatus.Text = "Status: IDLE";
+            lblStatus.ForeColor = Color.Gray;
+            btnStart.Enabled = true;
+            btnStop.Enabled = false;
+        }
+
+        private void ClickTimer_Tick(object sender, EventArgs e)
+        {
+            int btnIdx = comboMouseBtn.SelectedIndex;
+            int typeIdx = comboClickType.SelectedIndex;
+
+            int down = LEFTDOWN;
+            int up = LEFTUP;
+
+            if (btnIdx == 1) { down = RIGHTDOWN; up = RIGHTUP; }
+            else if (btnIdx == 2) { down = MIDDLEDOWN; up = MIDDLEUP; }
+
+            mouse_event(down, 0, 0, 0, 0);
+            mouse_event(up, 0, 0, 0, 0);
             clickCount++;
-            if ((DateTime.Now - lastTime).TotalSeconds >= 1)
+
+            if (typeIdx == 1) // Double click
             {
-                labelCPS.Text = "CPS : " + clickCount;
-                clickCount = 0;
-                lastTime = DateTime.Now;
+                mouse_event(down, 0, 0, 0, 0);
+                mouse_event(up, 0, 0, 0, 0);
+                clickCount++;
             }
         }
 
-        // Changer vitesse
-        private void numericUpDown1_ValueChanged(object sender, EventArgs e)
+        private void CpsTimer_Tick(object sender, EventArgs e)
         {
-            timer1.Interval = (int)numericUpDown1.Value;
+            currentCps = clickCount;
+            lblCps.Text = $"{currentCps} CPS";
+            clickCount = 0;
         }
 
-        // Animation glow CPS
-        private void AnimateGlow(object sender, EventArgs e)
+        private void UiTimer_Tick(object sender, EventArgs e)
         {
-            if (glowUp) glow += 5; else glow -= 5;
-            if (glow >= 80) glowUp = false;
-            if (glow <= 0) glowUp = true;
-            labelCPS.ForeColor = Color.FromArgb(255, 200, glow, glow);
-        }
-
-        // Hover boutons
-        private void ButtonHover(object sender, EventArgs e)
-        {
-            Button btn = sender as Button;
-            if (btn != null) btn.BackColor = Color.FromArgb(255, 50, 50);
-        }
-
-        private void ButtonLeave(object sender, EventArgs e)
-        {
-            Button btn = sender as Button;
-            if (btn != null)
+            if (!isRunning) 
             {
-                if (btn == buttonStart) btn.BackColor = Color.FromArgb(200, 30, 30);
-                else btn.BackColor = Color.FromArgb(120, 20, 20);
+                lblCps.ForeColor = Color.Gray;
+                return;
             }
+
+            if (glowUp) glow += 10; else glow -= 10;
+            if (glow >= 255) 
+            {
+                glow = 255;
+                glowUp = false;
+            }
+            if (glow <= 100) 
+            {
+                glow = 100;
+                glowUp = true;
+            }
+
+            lblCps.ForeColor = Color.FromArgb(glow, 200, 100);
         }
 
-        // Hotkey F6
         protected override void WndProc(ref Message m)
         {
             const int WM_HOTKEY = 0x0312;
             if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == HOTKEY_ID)
-                timer1.Enabled = !timer1.Enabled;
+            {
+                if (isRunning) StopClicker();
+                else StartClicker();
+            }
             base.WndProc(ref m);
         }
 
-        // Désenregistrer hotkey
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
             UnregisterHotKey(this.Handle, HOTKEY_ID);
+        }
+
+        private void btnClose_Click(object sender, EventArgs e)
+        {
+            Application.Exit();
+        }
+
+        private void btnMinimize_Click(object sender, EventArgs e)
+        {
+            this.WindowState = FormWindowState.Minimized;
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            Rectangle rect = new Rectangle(0, 0, this.Width, this.Height);
+            using (GraphicsPath path = new GraphicsPath())
+            {
+                int radius = 15;
+                path.AddArc(rect.X, rect.Y, radius, radius, 180, 90);
+                path.AddArc(rect.Right - radius, rect.Y, radius, radius, 270, 90);
+                path.AddArc(rect.Right - radius, rect.Bottom - radius, radius, radius, 0, 90);
+                path.AddArc(rect.X, rect.Bottom - radius, radius, radius, 90, 90);
+                path.CloseFigure();
+                this.Region = new Region(path);
+
+                using (Pen pen = new Pen(Color.FromArgb(60, 60, 70), 2))
+                {
+                    e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                    e.Graphics.DrawPath(pen, path);
+                }
+            }
         }
     }
 }
