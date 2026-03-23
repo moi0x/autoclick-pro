@@ -85,7 +85,7 @@ namespace autoclick
             this.lblTitle.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
             this.lblTitle.ForeColor = System.Drawing.Color.White;
             this.lblTitle.Location = new System.Drawing.Point(12, 8);
-            this.lblTitle.Text = "AutoClicker Pro";
+            this.lblTitle.Text = "AutoX";
 
             // btnClose
             this.btnClose.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
