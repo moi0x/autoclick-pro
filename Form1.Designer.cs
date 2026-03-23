@@ -31,7 +31,9 @@ namespace autoclick
             this.lblSecs = new System.Windows.Forms.Label();
             this.numMs = new System.Windows.Forms.NumericUpDown();
             this.lblMs = new System.Windows.Forms.Label();
-            
+            this.numTargetCps = new System.Windows.Forms.NumericUpDown();
+            this.lblTargetCps = new System.Windows.Forms.Label();
+
             this.grpOptions = new System.Windows.Forms.GroupBox();
             this.comboMouseBtn = new System.Windows.Forms.ComboBox();
             this.lblMouseBtn = new System.Windows.Forms.Label();
@@ -121,22 +123,30 @@ namespace autoclick
             this.grpInterval.Controls.Add(this.lblSecs);
             this.grpInterval.Controls.Add(this.numMs);
             this.grpInterval.Controls.Add(this.lblMs);
+            this.grpInterval.Controls.Add(this.numTargetCps);
+            this.grpInterval.Controls.Add(this.lblTargetCps);
 
-            int xOff = 20, yOff = 30;
-            this.numHours.Location = new System.Drawing.Point(xOff, yOff); this.numHours.Width = 50; this.numHours.Maximum = 999;
-            this.lblHours.Location = new System.Drawing.Point(xOff + 55, yOff + 3); this.lblHours.Text = "hours"; this.lblHours.AutoSize = true;
-            
-            xOff = 120;
-            this.numMins.Location = new System.Drawing.Point(xOff, yOff); this.numMins.Width = 50; this.numMins.Maximum = 59;
-            this.lblMins.Location = new System.Drawing.Point(xOff + 55, yOff + 3); this.lblMins.Text = "mins"; this.lblMins.AutoSize = true;
+            int xOff = 10, yOff = 30;
+            this.numHours.Location = new System.Drawing.Point(xOff, yOff); this.numHours.Width = 45; this.numHours.Maximum = 999;
+            this.lblHours.Location = new System.Drawing.Point(xOff + 48, yOff + 3); this.lblHours.Text = "h"; this.lblHours.AutoSize = true;
+
+            xOff = 80;
+            this.numMins.Location = new System.Drawing.Point(xOff, yOff); this.numMins.Width = 45; this.numMins.Maximum = 59;
+            this.lblMins.Location = new System.Drawing.Point(xOff + 48, yOff + 3); this.lblMins.Text = "m"; this.lblMins.AutoSize = true;
+
+            xOff = 150;
+            this.numSecs.Location = new System.Drawing.Point(xOff, yOff); this.numSecs.Width = 45; this.numSecs.Maximum = 59;
+            this.lblSecs.Location = new System.Drawing.Point(xOff + 48, yOff + 3); this.lblSecs.Text = "s"; this.lblSecs.AutoSize = true;
 
             xOff = 220;
-            this.numSecs.Location = new System.Drawing.Point(xOff, yOff); this.numSecs.Width = 50; this.numSecs.Maximum = 59;
-            this.lblSecs.Location = new System.Drawing.Point(xOff + 55, yOff + 3); this.lblSecs.Text = "secs"; this.lblSecs.AutoSize = true;
+            this.numMs.Location = new System.Drawing.Point(xOff, yOff); this.numMs.Width = 55; this.numMs.Maximum = 999; this.numMs.Value = 100;
+            this.lblMs.Location = new System.Drawing.Point(xOff + 58, yOff + 3); this.lblMs.Text = "ms"; this.lblMs.AutoSize = true;
+            this.numMs.ValueChanged += new System.EventHandler(this.numMs_ValueChanged);
 
             xOff = 320;
-            this.numMs.Location = new System.Drawing.Point(xOff, yOff); this.numMs.Width = 60; this.numMs.Maximum = 999; this.numMs.Value = 100;
-            this.lblMs.Location = new System.Drawing.Point(xOff + 65, yOff + 3); this.lblMs.Text = "ms"; this.lblMs.AutoSize = true;
+            this.numTargetCps.Location = new System.Drawing.Point(xOff, yOff); this.numTargetCps.Width = 50; this.numTargetCps.Maximum = 1000; this.numTargetCps.Value = 10;
+            this.lblTargetCps.Location = new System.Drawing.Point(xOff + 53, yOff + 3); this.lblTargetCps.Text = "CPS (Target)"; this.lblTargetCps.AutoSize = true;
+            this.numTargetCps.ValueChanged += new System.EventHandler(this.numTargetCps_ValueChanged);
 
             // 
             // grpOptions
@@ -258,6 +268,8 @@ namespace autoclick
         private System.Windows.Forms.Label lblSecs;
         private System.Windows.Forms.NumericUpDown numMs;
         private System.Windows.Forms.Label lblMs;
+        private System.Windows.Forms.NumericUpDown numTargetCps;
+        private System.Windows.Forms.Label lblTargetCps;
 
         private System.Windows.Forms.GroupBox grpOptions;
         private System.Windows.Forms.ComboBox comboMouseBtn;

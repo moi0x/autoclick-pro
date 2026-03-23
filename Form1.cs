@@ -15,7 +15,8 @@ namespace autoclick
         private int clickCount = 0;
         private int currentCps = 0;
         private bool isRunning = false;
-        
+        private bool isUpdatingIntervals = false;
+
         private int glow = 0;
         private bool glowUp = true;
         
@@ -90,6 +91,7 @@ namespace autoclick
             ApplyNumericUpDownStyle(numMins);
             ApplyNumericUpDownStyle(numSecs);
             ApplyNumericUpDownStyle(numMs);
+            ApplyNumericUpDownStyle(numTargetCps);
 
             btnStart.BackColor = Color.FromArgb(40, 150, 80);
             btnStop.BackColor = Color.FromArgb(180, 50, 50);
@@ -140,6 +142,41 @@ namespace autoclick
         private void btnStop_Click(object sender, EventArgs e)
         {
             StopClicker();
+        }
+
+        private void numTargetCps_ValueChanged(object sender, EventArgs e)
+        {
+            if (isUpdatingIntervals) return;
+            if (numTargetCps.Value > 0)
+            {
+                isUpdatingIntervals = true;
+                int ms = 1000 / (int)numTargetCps.Value;
+                numHours.Value = 0;
+                numMins.Value = 0;
+                numSecs.Value = 0;
+                numMs.Value = ms > 0 ? ms : 1;
+                isUpdatingIntervals = false;
+            }
+        }
+
+        private void numMs_ValueChanged(object sender, EventArgs e)
+        {
+            if (isUpdatingIntervals) return;
+            int totalMs = (int)(numHours.Value * 3600000 + numMins.Value * 60000 + numSecs.Value * 1000 + numMs.Value);
+            if (totalMs > 0 && totalMs <= 1000)
+            {
+                isUpdatingIntervals = true;
+                int cps = 1000 / totalMs;
+                if (cps <= numTargetCps.Maximum)
+                    numTargetCps.Value = cps > 0 ? cps : 1;
+                isUpdatingIntervals = false;
+            }
+            else if (totalMs > 1000)
+            {
+                isUpdatingIntervals = true;
+                numTargetCps.Value = 1;
+                isUpdatingIntervals = false;
+            }
         }
 
         private void StartClicker()
