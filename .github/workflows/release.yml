@@ -1,0 +1,77 @@
+name: Build & Release AutoClicker Pro
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Update Version in Files
+        run: |
+          $rawVersion = "${{ github.ref_name }}" -replace '^v\.?',''
+          if ($rawVersion -match '^\d+$') {
+              $VERSION = "$rawVersion.0.0.0"
+          } elseif ($rawVersion -match '^\d+\.\d+$') {
+              $VERSION = "$rawVersion.0.0"
+          } elseif ($rawVersion -match '^\d+\.\d+\.\d+$') {
+              $VERSION = "$rawVersion.0"
+          } else {
+              $VERSION = $rawVersion
+          }
+
+          # Update update.xml
+          $xml = Get-Content update.xml
+          $xml = $xml -replace '<version>.*</version>', "<version>$VERSION</version>"
+          $xml | Set-Content update.xml
+
+          # Update autoclick.csproj
+          $csproj = Get-Content autoclick.csproj
+          if ($csproj -match '<Version>') {
+            $csproj = $csproj -replace '<Version>.*</Version>', "<Version>$VERSION</Version>"
+          } else {
+            $csproj = $csproj -replace '</PropertyGroup>', "  <Version>$VERSION</Version>`n  </PropertyGroup>"
+          }
+          $csproj | Set-Content autoclick.csproj
+
+          # Set version for next steps
+          echo "CLEAN_VERSION=$VERSION" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Publish Build
+        run: dotnet publish autoclick.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ./output
+
+      - name: Zip Build
+        run: Compress-Archive -Path ./output/* -DestinationPath AutoClickerPro.zip
+
+      - name: Commit and Push Version Updates
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add update.xml autoclick.csproj
+          git commit -m "chore: bump version to ${{ env.CLEAN_VERSION }} [skip ci]" || echo "No changes to commit"
+          git push origin HEAD:master || git push origin HEAD:main || echo "Failed to push"
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: AutoClickerPro.zip
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
